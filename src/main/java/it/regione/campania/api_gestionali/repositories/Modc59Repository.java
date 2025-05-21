@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 import it.regione.campania.api_gestionali.models.Modc59;
 import it.regione.campania.api_gestionali.models.StruttureRicettive;
 
-import java.sql.Date;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
