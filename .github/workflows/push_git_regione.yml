@@ -1,0 +1,49 @@
+name: PushGitlabRegione
+
+on:
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+        - info
+        - warning
+        - debug
+  push:
+    branches:
+      - main
+
+jobs:
+  align_repository:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Configure Git
+      run: |
+        git config user.name "Marco Salzedo"
+        git config user.email "marco.salzedo.esterno@regione.campania.it"
+    - name: Add GitLab remote
+      run: |
+        echo "Adding remote"
+        git remote add regione "https://oauth2:${{ secrets.GITLAB_ACCESS_TOKEN }}@gitlab.regione.campania.it/dg12/portale-turismo/api-gestionali.git"
+        git fetch regione
+    - name: Create and checkout merge branch
+      run: |
+        git checkout -b merge-branch origin/main
+    - name: Merge regione/main into merge-branch
+      run: |
+        git merge regione/main --allow-unrelated-histories --no-edit
+    - name: Push merged changes to regione/main
+      run: |
+        echo "Pushing changes to GitLab"
+        git push regione merge-branch:main
+    - name: Log level
+      run: echo "Log level is ${{ github.event.inputs.logLevel }}"
