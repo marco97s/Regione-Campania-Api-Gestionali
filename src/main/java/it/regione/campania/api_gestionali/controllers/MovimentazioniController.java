@@ -115,7 +115,7 @@ public class MovimentazioniController {
                 response.setGiornate(new ArrayList<>());
                 response.getGiornate().add(item);
             }
-            dataInizio.plusDays(1);
+            dataInizio = dataInizio.plusDays(1);
         }
         return ResponseEntity.ok(response);
     }
@@ -146,6 +146,8 @@ public class MovimentazioniController {
             return ResponseEntity.badRequest().body(new MovimentazioniResponse("Struttura cessata con cusr: " + cusr));
         }
 
+        Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
+
         for (MovimentazioniRequestItem g : request.getGiornate()) {
             logger.info("[START] Elaborazione giornata: " + g.getDataRilevazione());
             int totArrivi = 0;
@@ -156,6 +158,14 @@ public class MovimentazioniController {
             List<C59Italiani> italiani = new ArrayList<>();
             List<C59Stranieri> stranieri = new ArrayList<>();
             LocalDate dataRilevazione = LocalDate.parse(g.getDataRilevazione(), java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
+            if (ultimoMeseValidato.isPresent() && Integer.parseInt(ultimoMeseValidato.get().split("-")[0]) >= dataRilevazione.getMonthValue()) {
+                logger.warning("Non è possibile inserire movimentazioni per un mese già validato: " + g.getDataRilevazione());
+                return ResponseEntity.badRequest().body(new MovimentazioniResponse("Non è possibile inserire movimentazioni per un mese già validato: " + g.getDataRilevazione()));
+            }
+            if (dataRilevazione.isAfter(LocalDate.now())) {
+                logger.warning("Non è possibile inserire movimentazioni per una data futura: " + g.getDataRilevazione());
+                return ResponseEntity.badRequest().body(new MovimentazioniResponse("Non è possibile inserire movimentazioni per una data futura: " + g.getDataRilevazione()));
+            }
             c59ItalianiRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
             c59StranieriRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
             for (MovimentazioneRequestItemMovimentazione movimentazione : g.getMovimentazioni()) {
@@ -250,6 +260,8 @@ public class MovimentazioniController {
             return ResponseEntity.badRequest().body(new MovimentazioniResponse("Struttura cessata con cusr: " + cusr));
         }
 
+        Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
+
         for (MovimentazioniRequestItem g : request.getGiornate()) {
             logger.info("[START] Elaborazione giornata: " + g.getDataRilevazione());
             int totArrivi = 0;
@@ -260,6 +272,14 @@ public class MovimentazioniController {
             List<C59Italiani> italiani = new ArrayList<>();
             List<C59Stranieri> stranieri = new ArrayList<>();
             LocalDate dataRilevazione = LocalDate.parse(g.getDataRilevazione(), java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
+            if (ultimoMeseValidato.isPresent() && Integer.parseInt(ultimoMeseValidato.get().split("-")[0]) >= dataRilevazione.getMonthValue()) {
+                logger.warning("Non è possibile inserire movimentazioni per un mese già validato: " + g.getDataRilevazione());
+                return ResponseEntity.badRequest().body(new MovimentazioniResponse("Non è possibile inserire movimentazioni per un mese già validato: " + g.getDataRilevazione()));
+            }
+            if (dataRilevazione.isAfter(LocalDate.now())) {
+                logger.warning("Non è possibile inserire movimentazioni per una data futura: " + g.getDataRilevazione());
+                return ResponseEntity.badRequest().body(new MovimentazioniResponse("Non è possibile inserire movimentazioni per una data futura: " + g.getDataRilevazione()));
+            }
             c59ItalianiRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
             c59StranieriRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
             for (MovimentazioneRequestItemMovimentazione movimentazione : g.getMovimentazioni()) {
