@@ -119,6 +119,15 @@ public class MovimentazioniController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Inserisce le movimentazioni per la struttura dell'utente autenticato.
+     *
+     * @param request        L'oggetto MovimentazioniRequest contenente le
+     *                       movimentazioni da inserire.
+     * @param authentication L'oggetto Authentication contenente le informazioni
+     *                       sull'utente autenticato.
+     * @return Un oggetto ResponseEntity con lo stato della richiesta.
+     */
     @PostMapping()
     @Transactional
     public ResponseEntity<Object> postMethodName(
