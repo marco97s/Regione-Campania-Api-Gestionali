@@ -36,6 +36,7 @@ import it.regione.campania.api_gestionali.responses.MovimentazioniResponseItemMo
 import jakarta.transaction.Transactional;
 
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
@@ -130,7 +131,102 @@ public class MovimentazioniController {
      */
     @PostMapping()
     @Transactional
-    public ResponseEntity<Object> postMethodName(
+    public ResponseEntity<Object> inserimentoMovimentazione(
+            @RequestBody MovimentazioniRequest request,
+            Authentication authentication) {
+        String cusr = authentication.getName();
+        logger.info("Richiesta inserimento movimentazioni per cusr: " + cusr);
+
+        Optional<StruttureRicettive> struttureRicettive = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+
+        if (struttureRicettive.isEmpty()) {
+            logger.warning("Struttura non trovata per cusr: " + cusr);
+            return ResponseEntity.badRequest().body(new MovimentazioniResponse("Nessuna struttura trovata con cusr: " + cusr));
+        } else if (struttureRicettive.get().getDatafineattivita() != null) {
+            return ResponseEntity.badRequest().body(new MovimentazioniResponse("Struttura cessata con cusr: " + cusr));
+        }
+
+        for (MovimentazioniRequestItem g : request.getGiornate()) {
+            logger.info("[START] Elaborazione giornata: " + g.getDataRilevazione());
+            int totArrivi = 0;
+            int totPartenze = 0;
+            int totPresenti = 0;
+            int totPresentiNottePrecedente = 0;
+            int totCamereOccupate = g.getCamereOccupate();
+            List<C59Italiani> italiani = new ArrayList<>();
+            List<C59Stranieri> stranieri = new ArrayList<>();
+            LocalDate dataRilevazione = LocalDate.parse(g.getDataRilevazione(), java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
+            c59ItalianiRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
+            c59StranieriRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
+            for (MovimentazioneRequestItemMovimentazione movimentazione : g.getMovimentazioni()) {
+                if (movimentazione.getCodiceProvincia() != null) {
+                    Optional<Province> provincia = provinceRepository.findFirstByCodiceistatIgnoreCaseAllIgnoreCase(
+                            movimentazione.getCodiceProvincia());
+                    if (provincia.isEmpty()) {
+                        logger.warning("Provincia non trovata: " + movimentazione.getCodiceProvincia());
+                        return ResponseEntity.badRequest().body(new MovimentazioniResponse("Provincia non trovata: " + movimentazione.getCodiceProvincia()));
+                    }
+                    C59Italiani i = new C59Italiani();
+                    i.setArrivati(movimentazione.getArrivi());
+                    i.setPartiti(movimentazione.getPartenze());
+                    i.setPresenti(movimentazione.getPresentiNottePrecedente());
+                    i.setStrutturaid(struttureRicettive.get());
+                    i.setProvinciaid(provincia.get());
+                    i.setAnno(dataRilevazione.getYear());
+                    i.setMese(dataRilevazione.getMonthValue());
+                    i.setGiorno(dataRilevazione.getDayOfMonth());
+                    italiani.add(i);
+                    totArrivi += movimentazione.getArrivi();
+                    totPartenze += movimentazione.getPartenze();
+                    totPresenti += (movimentazione.getPresentiNottePrecedente() + movimentazione.getArrivi() - movimentazione.getPartenze());
+                    totPresentiNottePrecedente += movimentazione.getPresentiNottePrecedente();
+                } else if (movimentazione.getCodiceNazione() != null) {
+                    Optional<Nazioni> nazione = nazioniRepository.findFirtsByCodiceEpt(Integer.parseInt(movimentazione.getCodiceNazione()));
+                    if (nazione.isEmpty()) {
+                        logger.warning("Nazione non trovata: " + movimentazione.getCodiceNazione());
+                        return ResponseEntity.badRequest().body(new MovimentazioniResponse("Nazione non trovata: " + movimentazione.getCodiceNazione()));
+                    }
+                    C59Stranieri s = new C59Stranieri();
+                    s.setArrivati(movimentazione.getArrivi());
+                    s.setPartiti(movimentazione.getPartenze());
+                    s.setPresenti(movimentazione.getPresentiNottePrecedente());
+                    s.setStrutturaid(struttureRicettive.get());
+                    s.setNazioneid(nazione.get());
+                    s.setAnno(dataRilevazione.getYear());
+                    s.setMese(dataRilevazione.getMonthValue());
+                    s.setGiorno(dataRilevazione.getDayOfMonth());
+                    stranieri.add(s);
+                    totArrivi += movimentazione.getArrivi();
+                    totPartenze += movimentazione.getPartenze();
+                    totPresenti += (movimentazione.getPresentiNottePrecedente() + movimentazione.getArrivi() - movimentazione.getPartenze());
+                    totPresentiNottePrecedente += movimentazione.getPresentiNottePrecedente();
+                }
+                List<Modc59> modc59DaEliminare = modc59Repository.findModC59ForAllDate(struttureRicettive.get(), dataRilevazione.getMonthValue(), dataRilevazione.getYear(), dataRilevazione.getDayOfMonth());
+                modc59Repository.deleteAll(modc59DaEliminare);
+
+                Modc59 modc59 = new Modc59();
+                modc59.setAnno(dataRilevazione.getYear());
+                modc59.setMese(dataRilevazione.getMonthValue());
+                modc59.setGiorno(dataRilevazione.getDayOfMonth());
+                modc59.setStrutturaid(struttureRicettive.get());
+                modc59.setCamerelibere(totCamereOccupate); //il campo camerelibere sulla tabella viene usato da sempre per tracciare le camere occupate
+                modc59.setTotarrivati(totArrivi);
+                modc59.setTotpartiti(totPartenze);
+                modc59.setTotpresenti(totPresenti);
+                modc59.setPresentinotte(totPresentiNottePrecedente);
+
+                c59ItalianiRepository.saveAll(italiani);
+                c59StranieriRepository.saveAll(stranieri);
+                modc59Repository.save(modc59);
+            }
+            logger.info("[END] Elaborazione giornata: " + g.getDataRilevazione());
+        }
+        return ResponseEntity.status(201).build();
+    }
+
+    @PutMapping()
+    @Transactional
+    public ResponseEntity<Object> modificaMovimentazione(
             @RequestBody MovimentazioniRequest request,
             Authentication authentication) {
         String cusr = authentication.getName();
