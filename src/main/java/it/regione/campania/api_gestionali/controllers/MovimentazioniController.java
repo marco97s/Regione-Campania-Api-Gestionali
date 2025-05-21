@@ -224,6 +224,15 @@ public class MovimentazioniController {
         return ResponseEntity.status(201).build();
     }
 
+    /**
+     * Modifica le movimentazioni per la struttura dell'utente autenticato.
+     *
+     * @param request        L'oggetto MovimentazioniRequest contenente le
+     *                       movimentazioni da modificare.
+     * @param authentication L'oggetto Authentication contenente le informazioni
+     *                       sull'utente autenticato.
+     * @return Un oggetto ResponseEntity con lo stato della richiesta.
+     */
     @PutMapping()
     @Transactional
     public ResponseEntity<Object> modificaMovimentazione(
