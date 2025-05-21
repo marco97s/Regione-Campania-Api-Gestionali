@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -183,6 +184,61 @@ public class MovimentazioniController {
         return ResponseEntity.status(200).build();
     }
 
+    /**
+     * Elimina le movimentazioni per una struttura ricettiva.
+     *
+     * @param dataInizio     La data di inizio per l'eliminazione (formato:
+     *                       ddMMyyyy).
+     * @param offset         Il numero di giorni da eliminare.
+     * @param authentication L'oggetto di autenticazione contenente il nome utente.
+     * @return Una risposta HTTP con lo stato dell'operazione.
+     */
+    @DeleteMapping()
+    @Transactional
+    public ResponseEntity<Object> eliminaMovimentazioni(
+            @RequestParam(name = "dataInizio", required = true) @DateTimeFormat(pattern = "ddMMyyyy") LocalDate dataInizio,
+            @RequestParam(name = "offset", required = false, defaultValue = "1") Integer offset,
+            Authentication authentication) {
+
+        String cusr = authentication.getName();
+        logger.info("Eliminazione movimentazioni per cusr: " + cusr);
+
+        Optional<StruttureRicettive> strutturaOpt = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+        if (strutturaOpt.isEmpty()) {
+            return badRequest("Struttura non trovata");
+        }
+
+        StruttureRicettive struttura = strutturaOpt.get();
+        if (struttura.getDatafineattivita() != null) {
+            return badRequest("Struttura cessata");
+        }
+
+        Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
+
+        for (int i = 0; i < offset; i++) {
+            ResponseEntity<Object> validationResponse = validateGiornata(dataInizio, ultimoMeseValidato);
+            if (validationResponse != null) {
+                return validationResponse;
+            }
+
+            deleteMovimentazioni(struttura, dataInizio);
+            dataInizio = dataInizio.plusDays(1);
+        }
+
+        return ResponseEntity.status(204).build();
+    }
+
+    private Void deleteMovimentazioni(StruttureRicettive struttura, LocalDate data) {
+        c59ItalianiRepository.deleteByStrutturaAndDate(struttura, data.getYear(), data.getMonthValue(),
+                data.getDayOfMonth());
+        c59StranieriRepository.deleteByStrutturaAndDate(struttura, data.getYear(), data.getMonthValue(),
+                data.getDayOfMonth());
+        List<Modc59> modc59DaEliminare = modc59Repository.findModC59ForAllDate(struttura, data.getMonthValue(),
+                data.getYear(), data.getDayOfMonth());
+        modc59Repository.deleteAll(modc59DaEliminare);
+        return null;
+    }
+
     private MovimentazioniResponseItem createMovimentazioniItem(StruttureRicettive struttura, LocalDate data) {
         MovimentazioniResponseItem item = new MovimentazioniResponseItem();
         item.setDataRilevazione(
@@ -208,17 +264,44 @@ public class MovimentazioniController {
 
         if (ultimoMeseValidato.isPresent()
                 && Integer.parseInt(ultimoMeseValidato.get().split("-")[0]) >= dataRilevazione.getMonthValue()) {
-            logger.warning("Non è possibile inserire movimentazioni per un mese già validato: "
+            logger.warning("Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
                     + giornata.getDataRilevazione());
-            return badRequest("Non è possibile inserire movimentazioni per un mese già validato: "
-                    + giornata.getDataRilevazione());
+            return badRequest(
+                    "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
+                            + giornata.getDataRilevazione());
         }
 
         if (dataRilevazione.isAfter(LocalDate.now())) {
             logger.warning(
-                    "Non è possibile inserire movimentazioni per una data futura: " + giornata.getDataRilevazione());
+                    "Non è possibile inserire, modificare o eliminare movimentazioni per una data futura: "
+                            + giornata.getDataRilevazione());
             return badRequest(
-                    "Non è possibile inserire movimentazioni per una data futura: " + giornata.getDataRilevazione());
+                    "Non è possibile inserire, modificare o eliminare movimentazioni per una data futura: "
+                            + giornata.getDataRilevazione());
+        }
+
+        return null;
+    }
+
+    private ResponseEntity<Object> validateGiornata(LocalDate dataRilevazione,
+            Optional<String> ultimoMeseValidato) {
+
+        if (ultimoMeseValidato.isPresent()
+                && Integer.parseInt(ultimoMeseValidato.get().split("-")[0]) >= dataRilevazione.getMonthValue()) {
+            logger.warning("Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
+                    + dataRilevazione);
+            return badRequest(
+                    "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
+                            + dataRilevazione);
+        }
+
+        if (dataRilevazione.isAfter(LocalDate.now())) {
+            logger.warning(
+                    "Non è possibile inserire, modificare o eliminare movimentazioni per una data futura: "
+                            + dataRilevazione);
+            return badRequest(
+                    "Non è possibile inserire, modificare o eliminare movimentazioni per una data futura: "
+                            + dataRilevazione);
         }
 
         return null;
@@ -232,6 +315,9 @@ public class MovimentazioniController {
                 dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
         c59StranieriRepository.deleteByStrutturaAndDate(struttura, dataRilevazione.getYear(),
                 dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
+        List<Modc59> modc59DaEliminare = modc59Repository.findModC59ForAllDate(struttura,
+                dataRilevazione.getMonthValue(), dataRilevazione.getYear(), dataRilevazione.getDayOfMonth());
+        modc59Repository.deleteAll(modc59DaEliminare);
 
         List<C59Italiani> italiani = new ArrayList<>();
         List<C59Stranieri> stranieri = new ArrayList<>();
