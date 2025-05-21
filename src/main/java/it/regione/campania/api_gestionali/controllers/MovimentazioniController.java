@@ -63,289 +63,258 @@ public class MovimentazioniController {
     private Modc59Repository modc59Repository;
 
     /**
-     * Restituisce l'archivio delle movimentazioni per la struttura dell'utente
-     * autenticato.
+     * Ottiene l'archivio delle movimentazioni per una struttura ricettiva.
      *
-     * @param dataInizio     La data di inizio per il filtro delle movimentazioni
-     *                       (formato ddMMyyyy).
-     * @param offset         L'offset per la paginazione (default: 1).
-     * @param authentication L'oggetto Authentication contenente le informazioni
-     *                       sull'utente autenticato.
-     * @return Un oggetto ResponseEntity contenente la risposta con le
-     *         movimentazioni.
+     * @param dataInizio     La data di inizio per l'archivio (formato: ddMMyyyy).
+     * @param offset         Il numero di giorni da includere nell'archivio.
+     * @param authentication L'oggetto di autenticazione contenente il nome utente.
+     * @return Una risposta contenente l'archivio delle movimentazioni.
      */
     @GetMapping()
-    public ResponseEntity<MovimentazioniResponse> getArchivioMovimentazioni(
+    public ResponseEntity<Object> getArchivioMovimentazioni(
             @RequestParam(name = "dataInizio", required = true) @DateTimeFormat(pattern = "ddMMyyyy") LocalDate dataInizio,
             @RequestParam(name = "offset", required = false, defaultValue = "1") Integer offset,
             Authentication authentication) {
 
         String cusr = authentication.getName();
-        logger.info("Richiesta archivio movimentazioni per cusr: " + cusr +
-                " - Data inizio: " + dataInizio +
-                " - Offset: " + offset);
+        logger.info("Richiesta archivio movimentazioni per cusr: " + cusr);
+
+        Optional<StruttureRicettive> strutturaOpt = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+        if (strutturaOpt.isEmpty()) {
+            return badRequest("Struttura non trovata");
+        }
+
+        StruttureRicettive struttura = strutturaOpt.get();
+        if (struttura.getDatafineattivita() != null) {
+            return badRequest("Struttura cessata");
+        }
 
         MovimentazioniResponse response = new MovimentazioniResponse();
-        Optional<StruttureRicettive> struttureRicettive = struttureRicettiveRepository.getStrutturaFromCir(cusr);
-
-        if (struttureRicettive.isEmpty()) {
-            logger.warning("Struttura non trovata per cusr: " + cusr);
-            return ResponseEntity.badRequest().body(new MovimentazioniResponse("Struttura non trovata"));
-        } else if (struttureRicettive.get().getDatafineattivita() != null) {
-            return ResponseEntity.badRequest().body(new MovimentazioniResponse("Struttura cessata"));
-        }
+        response.setGiornate(new ArrayList<>());
 
         for (int i = 0; i < offset; i++) {
-            MovimentazioniResponseItem item = new MovimentazioniResponseItem();
-            item.setDataRilevazione(String.format("%02d%02d%04d", dataInizio.getDayOfMonth(),
-                    dataInizio.getMonthValue(), dataInizio.getYear()));
-            item.setMovimentazioni(new ArrayList<>());
-            item.setCamereOccupate(0);
-            List<C59Italiani> italiani = c59ItalianiRepository.findAllByStrutturaAndDate(
-                    struttureRicettive.get().getIdstrutturaricettiva(), dataInizio.getYear(),
-                    dataInizio.getMonthValue(), dataInizio.getDayOfMonth());
-            fillItaliani(italiani, item);
-            List<C59Stranieri> stranieri = c59StranieriRepository.findAllByStrutturaAndDate(
-                    struttureRicettive.get().getIdstrutturaricettiva(), dataInizio.getYear(),
-                    dataInizio.getMonthValue(), dataInizio.getDayOfMonth());
-            fillStranieri(stranieri, item);
-            if (response.getGiornate() != null) {
-                response.getGiornate().add(item);
-            } else {
-                response.setGiornate(new ArrayList<>());
-                response.getGiornate().add(item);
-            }
+            MovimentazioniResponseItem item = createMovimentazioniItem(struttura, dataInizio);
+            response.getGiornate().add(item);
             dataInizio = dataInizio.plusDays(1);
         }
+
         return ResponseEntity.ok(response);
     }
 
     /**
-     * Inserisce le movimentazioni per la struttura dell'utente autenticato.
+     * Inserisce nuove movimentazioni per una struttura ricettiva.
      *
-     * @param request        L'oggetto MovimentazioniRequest contenente le
-     *                       movimentazioni da inserire.
-     * @param authentication L'oggetto Authentication contenente le informazioni
-     *                       sull'utente autenticato.
-     * @return Un oggetto ResponseEntity con lo stato della richiesta.
+     * @param request        L'oggetto contenente i dati delle movimentazioni da
+     *                       inserire.
+     * @param authentication L'oggetto di autenticazione contenente il nome utente.
+     * @return Una risposta HTTP con lo stato dell'operazione.
      */
     @PostMapping()
     @Transactional
     public ResponseEntity<Object> inserimentoMovimentazione(
             @RequestBody MovimentazioniRequest request,
             Authentication authentication) {
+
         String cusr = authentication.getName();
         logger.info("Richiesta inserimento movimentazioni per cusr: " + cusr);
 
-        Optional<StruttureRicettive> struttureRicettive = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+        Optional<StruttureRicettive> strutturaOpt = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+        if (strutturaOpt.isEmpty()) {
+            return badRequest("Nessuna struttura trovata con cusr: " + cusr);
+        }
 
-        if (struttureRicettive.isEmpty()) {
-            logger.warning("Struttura non trovata per cusr: " + cusr);
-            return ResponseEntity.badRequest().body(new MovimentazioniResponse("Nessuna struttura trovata con cusr: " + cusr));
-        } else if (struttureRicettive.get().getDatafineattivita() != null) {
-            return ResponseEntity.badRequest().body(new MovimentazioniResponse("Struttura cessata con cusr: " + cusr));
+        StruttureRicettive struttura = strutturaOpt.get();
+        if (struttura.getDatafineattivita() != null) {
+            return badRequest("Struttura cessata con cusr: " + cusr);
         }
 
         Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
 
-        for (MovimentazioniRequestItem g : request.getGiornate()) {
-            logger.info("[START] Elaborazione giornata: " + g.getDataRilevazione());
-            int totArrivi = 0;
-            int totPartenze = 0;
-            int totPresenti = 0;
-            int totPresentiNottePrecedente = 0;
-            int totCamereOccupate = g.getCamereOccupate();
-            List<C59Italiani> italiani = new ArrayList<>();
-            List<C59Stranieri> stranieri = new ArrayList<>();
-            LocalDate dataRilevazione = LocalDate.parse(g.getDataRilevazione(), java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
-            if (ultimoMeseValidato.isPresent() && Integer.parseInt(ultimoMeseValidato.get().split("-")[0]) >= dataRilevazione.getMonthValue()) {
-                logger.warning("Non è possibile inserire movimentazioni per un mese già validato: " + g.getDataRilevazione());
-                return ResponseEntity.badRequest().body(new MovimentazioniResponse("Non è possibile inserire movimentazioni per un mese già validato: " + g.getDataRilevazione()));
+        for (MovimentazioniRequestItem giornata : request.getGiornate()) {
+            ResponseEntity<Object> validationResponse = validateGiornata(giornata, ultimoMeseValidato);
+            if (validationResponse != null) {
+                return validationResponse;
             }
-            if (dataRilevazione.isAfter(LocalDate.now())) {
-                logger.warning("Non è possibile inserire movimentazioni per una data futura: " + g.getDataRilevazione());
-                return ResponseEntity.badRequest().body(new MovimentazioniResponse("Non è possibile inserire movimentazioni per una data futura: " + g.getDataRilevazione()));
-            }
-            c59ItalianiRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
-            c59StranieriRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
-            for (MovimentazioneRequestItemMovimentazione movimentazione : g.getMovimentazioni()) {
-                if (movimentazione.getCodiceProvincia() != null) {
-                    Optional<Province> provincia = provinceRepository.findFirstByCodiceistatIgnoreCaseAllIgnoreCase(
-                            movimentazione.getCodiceProvincia());
-                    if (provincia.isEmpty()) {
-                        logger.warning("Provincia non trovata: " + movimentazione.getCodiceProvincia());
-                        return ResponseEntity.badRequest().body(new MovimentazioniResponse("Provincia non trovata: " + movimentazione.getCodiceProvincia()));
-                    }
-                    C59Italiani i = new C59Italiani();
-                    i.setArrivati(movimentazione.getArrivi());
-                    i.setPartiti(movimentazione.getPartenze());
-                    i.setPresenti(movimentazione.getPresentiNottePrecedente());
-                    i.setStrutturaid(struttureRicettive.get());
-                    i.setProvinciaid(provincia.get());
-                    i.setAnno(dataRilevazione.getYear());
-                    i.setMese(dataRilevazione.getMonthValue());
-                    i.setGiorno(dataRilevazione.getDayOfMonth());
-                    italiani.add(i);
-                    totArrivi += movimentazione.getArrivi();
-                    totPartenze += movimentazione.getPartenze();
-                    totPresenti += (movimentazione.getPresentiNottePrecedente() + movimentazione.getArrivi() - movimentazione.getPartenze());
-                    totPresentiNottePrecedente += movimentazione.getPresentiNottePrecedente();
-                } else if (movimentazione.getCodiceNazione() != null) {
-                    Optional<Nazioni> nazione = nazioniRepository.findFirtsByCodiceEpt(Integer.parseInt(movimentazione.getCodiceNazione()));
-                    if (nazione.isEmpty()) {
-                        logger.warning("Nazione non trovata: " + movimentazione.getCodiceNazione());
-                        return ResponseEntity.badRequest().body(new MovimentazioniResponse("Nazione non trovata: " + movimentazione.getCodiceNazione()));
-                    }
-                    C59Stranieri s = new C59Stranieri();
-                    s.setArrivati(movimentazione.getArrivi());
-                    s.setPartiti(movimentazione.getPartenze());
-                    s.setPresenti(movimentazione.getPresentiNottePrecedente());
-                    s.setStrutturaid(struttureRicettive.get());
-                    s.setNazioneid(nazione.get());
-                    s.setAnno(dataRilevazione.getYear());
-                    s.setMese(dataRilevazione.getMonthValue());
-                    s.setGiorno(dataRilevazione.getDayOfMonth());
-                    stranieri.add(s);
-                    totArrivi += movimentazione.getArrivi();
-                    totPartenze += movimentazione.getPartenze();
-                    totPresenti += (movimentazione.getPresentiNottePrecedente() + movimentazione.getArrivi() - movimentazione.getPartenze());
-                    totPresentiNottePrecedente += movimentazione.getPresentiNottePrecedente();
-                }
-                List<Modc59> modc59DaEliminare = modc59Repository.findModC59ForAllDate(struttureRicettive.get(), dataRilevazione.getMonthValue(), dataRilevazione.getYear(), dataRilevazione.getDayOfMonth());
-                modc59Repository.deleteAll(modc59DaEliminare);
 
-                Modc59 modc59 = new Modc59();
-                modc59.setAnno(dataRilevazione.getYear());
-                modc59.setMese(dataRilevazione.getMonthValue());
-                modc59.setGiorno(dataRilevazione.getDayOfMonth());
-                modc59.setStrutturaid(struttureRicettive.get());
-                modc59.setCamerelibere(totCamereOccupate); //il campo camerelibere sulla tabella viene usato da sempre per tracciare le camere occupate
-                modc59.setTotarrivati(totArrivi);
-                modc59.setTotpartiti(totPartenze);
-                modc59.setTotpresenti(totPresenti);
-                modc59.setPresentinotte(totPresentiNottePrecedente);
-
-                c59ItalianiRepository.saveAll(italiani);
-                c59StranieriRepository.saveAll(stranieri);
-                modc59Repository.save(modc59);
-            }
-            logger.info("[END] Elaborazione giornata: " + g.getDataRilevazione());
+            processGiornata(giornata, struttura);
         }
+
         return ResponseEntity.status(201).build();
     }
 
     /**
-     * Modifica le movimentazioni per la struttura dell'utente autenticato.
+     * Modifica le movimentazioni esistenti per una struttura ricettiva.
      *
-     * @param request        L'oggetto MovimentazioniRequest contenente le
-     *                       movimentazioni da modificare.
-     * @param authentication L'oggetto Authentication contenente le informazioni
-     *                       sull'utente autenticato.
-     * @return Un oggetto ResponseEntity con lo stato della richiesta.
+     * @param request        L'oggetto contenente i dati delle movimentazioni da
+     *                       modificare.
+     * @param authentication L'oggetto di autenticazione contenente il nome utente.
+     * @return Una risposta HTTP con lo stato dell'operazione.
      */
     @PutMapping()
     @Transactional
     public ResponseEntity<Object> modificaMovimentazione(
             @RequestBody MovimentazioniRequest request,
             Authentication authentication) {
+
         String cusr = authentication.getName();
         logger.info("Richiesta inserimento movimentazioni per cusr: " + cusr);
 
-        Optional<StruttureRicettive> struttureRicettive = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+        Optional<StruttureRicettive> strutturaOpt = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+        if (strutturaOpt.isEmpty()) {
+            return badRequest("Nessuna struttura trovata con cusr: " + cusr);
+        }
 
-        if (struttureRicettive.isEmpty()) {
-            logger.warning("Struttura non trovata per cusr: " + cusr);
-            return ResponseEntity.badRequest().body(new MovimentazioniResponse("Nessuna struttura trovata con cusr: " + cusr));
-        } else if (struttureRicettive.get().getDatafineattivita() != null) {
-            return ResponseEntity.badRequest().body(new MovimentazioniResponse("Struttura cessata con cusr: " + cusr));
+        StruttureRicettive struttura = strutturaOpt.get();
+        if (struttura.getDatafineattivita() != null) {
+            return badRequest("Struttura cessata con cusr: " + cusr);
         }
 
         Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
 
-        for (MovimentazioniRequestItem g : request.getGiornate()) {
-            logger.info("[START] Elaborazione giornata: " + g.getDataRilevazione());
-            int totArrivi = 0;
-            int totPartenze = 0;
-            int totPresenti = 0;
-            int totPresentiNottePrecedente = 0;
-            int totCamereOccupate = g.getCamereOccupate();
-            List<C59Italiani> italiani = new ArrayList<>();
-            List<C59Stranieri> stranieri = new ArrayList<>();
-            LocalDate dataRilevazione = LocalDate.parse(g.getDataRilevazione(), java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
-            if (ultimoMeseValidato.isPresent() && Integer.parseInt(ultimoMeseValidato.get().split("-")[0]) >= dataRilevazione.getMonthValue()) {
-                logger.warning("Non è possibile inserire movimentazioni per un mese già validato: " + g.getDataRilevazione());
-                return ResponseEntity.badRequest().body(new MovimentazioniResponse("Non è possibile inserire movimentazioni per un mese già validato: " + g.getDataRilevazione()));
+        for (MovimentazioniRequestItem giornata : request.getGiornate()) {
+            ResponseEntity<Object> validationResponse = validateGiornata(giornata, ultimoMeseValidato);
+            if (validationResponse != null) {
+                return validationResponse;
             }
-            if (dataRilevazione.isAfter(LocalDate.now())) {
-                logger.warning("Non è possibile inserire movimentazioni per una data futura: " + g.getDataRilevazione());
-                return ResponseEntity.badRequest().body(new MovimentazioniResponse("Non è possibile inserire movimentazioni per una data futura: " + g.getDataRilevazione()));
-            }
-            c59ItalianiRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
-            c59StranieriRepository.deleteByStrutturaAndDate(struttureRicettive.get(), dataRilevazione.getYear(), dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
-            for (MovimentazioneRequestItemMovimentazione movimentazione : g.getMovimentazioni()) {
-                if (movimentazione.getCodiceProvincia() != null) {
-                    Optional<Province> provincia = provinceRepository.findFirstByCodiceistatIgnoreCaseAllIgnoreCase(
-                            movimentazione.getCodiceProvincia());
-                    if (provincia.isEmpty()) {
-                        logger.warning("Provincia non trovata: " + movimentazione.getCodiceProvincia());
-                        return ResponseEntity.badRequest().body(new MovimentazioniResponse("Provincia non trovata: " + movimentazione.getCodiceProvincia()));
-                    }
-                    C59Italiani i = new C59Italiani();
-                    i.setArrivati(movimentazione.getArrivi());
-                    i.setPartiti(movimentazione.getPartenze());
-                    i.setPresenti(movimentazione.getPresentiNottePrecedente());
-                    i.setStrutturaid(struttureRicettive.get());
-                    i.setProvinciaid(provincia.get());
-                    i.setAnno(dataRilevazione.getYear());
-                    i.setMese(dataRilevazione.getMonthValue());
-                    i.setGiorno(dataRilevazione.getDayOfMonth());
-                    italiani.add(i);
-                    totArrivi += movimentazione.getArrivi();
-                    totPartenze += movimentazione.getPartenze();
-                    totPresenti += (movimentazione.getPresentiNottePrecedente() + movimentazione.getArrivi() - movimentazione.getPartenze());
-                    totPresentiNottePrecedente += movimentazione.getPresentiNottePrecedente();
-                } else if (movimentazione.getCodiceNazione() != null) {
-                    Optional<Nazioni> nazione = nazioniRepository.findFirtsByCodiceEpt(Integer.parseInt(movimentazione.getCodiceNazione()));
-                    if (nazione.isEmpty()) {
-                        logger.warning("Nazione non trovata: " + movimentazione.getCodiceNazione());
-                        return ResponseEntity.badRequest().body(new MovimentazioniResponse("Nazione non trovata: " + movimentazione.getCodiceNazione()));
-                    }
-                    C59Stranieri s = new C59Stranieri();
-                    s.setArrivati(movimentazione.getArrivi());
-                    s.setPartiti(movimentazione.getPartenze());
-                    s.setPresenti(movimentazione.getPresentiNottePrecedente());
-                    s.setStrutturaid(struttureRicettive.get());
-                    s.setNazioneid(nazione.get());
-                    s.setAnno(dataRilevazione.getYear());
-                    s.setMese(dataRilevazione.getMonthValue());
-                    s.setGiorno(dataRilevazione.getDayOfMonth());
-                    stranieri.add(s);
-                    totArrivi += movimentazione.getArrivi();
-                    totPartenze += movimentazione.getPartenze();
-                    totPresenti += (movimentazione.getPresentiNottePrecedente() + movimentazione.getArrivi() - movimentazione.getPartenze());
-                    totPresentiNottePrecedente += movimentazione.getPresentiNottePrecedente();
-                }
-                List<Modc59> modc59DaEliminare = modc59Repository.findModC59ForAllDate(struttureRicettive.get(), dataRilevazione.getMonthValue(), dataRilevazione.getYear(), dataRilevazione.getDayOfMonth());
-                modc59Repository.deleteAll(modc59DaEliminare);
 
-                Modc59 modc59 = new Modc59();
-                modc59.setAnno(dataRilevazione.getYear());
-                modc59.setMese(dataRilevazione.getMonthValue());
-                modc59.setGiorno(dataRilevazione.getDayOfMonth());
-                modc59.setStrutturaid(struttureRicettive.get());
-                modc59.setCamerelibere(totCamereOccupate); //il campo camerelibere sulla tabella viene usato da sempre per tracciare le camere occupate
-                modc59.setTotarrivati(totArrivi);
-                modc59.setTotpartiti(totPartenze);
-                modc59.setTotpresenti(totPresenti);
-                modc59.setPresentinotte(totPresentiNottePrecedente);
-
-                c59ItalianiRepository.saveAll(italiani);
-                c59StranieriRepository.saveAll(stranieri);
-                modc59Repository.save(modc59);
-            }
-            logger.info("[END] Elaborazione giornata: " + g.getDataRilevazione());
+            processGiornata(giornata, struttura);
         }
-        return ResponseEntity.status(201).build();
+
+        return ResponseEntity.status(200).build();
+    }
+
+    private MovimentazioniResponseItem createMovimentazioniItem(StruttureRicettive struttura, LocalDate data) {
+        MovimentazioniResponseItem item = new MovimentazioniResponseItem();
+        item.setDataRilevazione(
+                String.format("%02d%02d%04d", data.getDayOfMonth(), data.getMonthValue(), data.getYear()));
+        item.setMovimentazioni(new ArrayList<>());
+        item.setCamereOccupate(0);
+
+        List<C59Italiani> italiani = c59ItalianiRepository.findAllByStrutturaAndDate(
+                struttura.getIdstrutturaricettiva(), data.getYear(), data.getMonthValue(), data.getDayOfMonth());
+        fillItaliani(italiani, item);
+
+        List<C59Stranieri> stranieri = c59StranieriRepository.findAllByStrutturaAndDate(
+                struttura.getIdstrutturaricettiva(), data.getYear(), data.getMonthValue(), data.getDayOfMonth());
+        fillStranieri(stranieri, item);
+
+        return item;
+    }
+
+    private ResponseEntity<Object> validateGiornata(MovimentazioniRequestItem giornata,
+            Optional<String> ultimoMeseValidato) {
+        LocalDate dataRilevazione = LocalDate.parse(giornata.getDataRilevazione(),
+                java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
+
+        if (ultimoMeseValidato.isPresent()
+                && Integer.parseInt(ultimoMeseValidato.get().split("-")[0]) >= dataRilevazione.getMonthValue()) {
+            logger.warning("Non è possibile inserire movimentazioni per un mese già validato: "
+                    + giornata.getDataRilevazione());
+            return badRequest("Non è possibile inserire movimentazioni per un mese già validato: "
+                    + giornata.getDataRilevazione());
+        }
+
+        if (dataRilevazione.isAfter(LocalDate.now())) {
+            logger.warning(
+                    "Non è possibile inserire movimentazioni per una data futura: " + giornata.getDataRilevazione());
+            return badRequest(
+                    "Non è possibile inserire movimentazioni per una data futura: " + giornata.getDataRilevazione());
+        }
+
+        return null;
+    }
+
+    private void processGiornata(MovimentazioniRequestItem giornata, StruttureRicettive struttura) {
+        LocalDate dataRilevazione = LocalDate.parse(giornata.getDataRilevazione(),
+                java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
+
+        c59ItalianiRepository.deleteByStrutturaAndDate(struttura, dataRilevazione.getYear(),
+                dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
+        c59StranieriRepository.deleteByStrutturaAndDate(struttura, dataRilevazione.getYear(),
+                dataRilevazione.getMonthValue(), dataRilevazione.getDayOfMonth());
+
+        List<C59Italiani> italiani = new ArrayList<>();
+        List<C59Stranieri> stranieri = new ArrayList<>();
+        int totArrivi = 0, totPartenze = 0, totPresenti = 0, totPresentiNottePrecedente = 0;
+
+        for (MovimentazioneRequestItemMovimentazione movimentazione : giornata.getMovimentazioni()) {
+            if (movimentazione.getCodiceProvincia() != null) {
+                totArrivi += processItaliani(movimentazione, struttura, dataRilevazione, italiani);
+            } else if (movimentazione.getCodiceNazione() != null) {
+                totArrivi += processStranieri(movimentazione, struttura, dataRilevazione, stranieri);
+            }
+        }
+
+        saveMovimentazioni(struttura, dataRilevazione, giornata.getCamereOccupate(), totArrivi, totPartenze,
+                totPresenti, totPresentiNottePrecedente, italiani, stranieri);
+    }
+
+    private int processItaliani(MovimentazioneRequestItemMovimentazione movimentazione, StruttureRicettive struttura,
+            LocalDate dataRilevazione, List<C59Italiani> italiani) {
+        Optional<Province> provincia = provinceRepository
+                .findFirstByCodiceistatIgnoreCaseAllIgnoreCase(movimentazione.getCodiceProvincia());
+        if (provincia.isEmpty()) {
+            throw new IllegalArgumentException("Provincia non trovata: " + movimentazione.getCodiceProvincia());
+        }
+
+        C59Italiani i = new C59Italiani();
+        i.setArrivati(movimentazione.getArrivi());
+        i.setPartiti(movimentazione.getPartenze());
+        i.setPresenti(movimentazione.getPresentiNottePrecedente());
+        i.setStrutturaid(struttura);
+        i.setProvinciaid(provincia.get());
+        i.setAnno(dataRilevazione.getYear());
+        i.setMese(dataRilevazione.getMonthValue());
+        i.setGiorno(dataRilevazione.getDayOfMonth());
+        italiani.add(i);
+
+        return movimentazione.getArrivi();
+    }
+
+    private int processStranieri(MovimentazioneRequestItemMovimentazione movimentazione, StruttureRicettive struttura,
+            LocalDate dataRilevazione, List<C59Stranieri> stranieri) {
+        Optional<Nazioni> nazione = nazioniRepository
+                .findFirtsByCodiceEpt(Integer.parseInt(movimentazione.getCodiceNazione()));
+        if (nazione.isEmpty()) {
+            throw new IllegalArgumentException("Nazione non trovata: " + movimentazione.getCodiceNazione());
+        }
+
+        C59Stranieri s = new C59Stranieri();
+        s.setArrivati(movimentazione.getArrivi());
+        s.setPartiti(movimentazione.getPartenze());
+        s.setPresenti(movimentazione.getPresentiNottePrecedente());
+        s.setStrutturaid(struttura);
+        s.setNazioneid(nazione.get());
+        s.setAnno(dataRilevazione.getYear());
+        s.setMese(dataRilevazione.getMonthValue());
+        s.setGiorno(dataRilevazione.getDayOfMonth());
+        stranieri.add(s);
+
+        return movimentazione.getArrivi();
+    }
+
+    private void saveMovimentazioni(StruttureRicettive struttura, LocalDate dataRilevazione, int camereOccupate,
+            int totArrivi, int totPartenze, int totPresenti, int totPresentiNottePrecedente, List<C59Italiani> italiani,
+            List<C59Stranieri> stranieri) {
+        Modc59 modc59 = new Modc59();
+        modc59.setAnno(dataRilevazione.getYear());
+        modc59.setMese(dataRilevazione.getMonthValue());
+        modc59.setGiorno(dataRilevazione.getDayOfMonth());
+        modc59.setStrutturaid(struttura);
+        modc59.setCamerelibere(camereOccupate);
+        modc59.setTotarrivati(totArrivi);
+        modc59.setTotpartiti(totPartenze);
+        modc59.setTotpresenti(totPresenti);
+        modc59.setPresentinotte(totPresentiNottePrecedente);
+
+        c59ItalianiRepository.saveAll(italiani);
+        c59StranieriRepository.saveAll(stranieri);
+        modc59Repository.save(modc59);
+    }
+
+    private ResponseEntity<Object> badRequest(String message) {
+        logger.warning(message);
+        return ResponseEntity.badRequest().body(new MovimentazioniResponse(message));
     }
 
     private void fillItaliani(List<C59Italiani> italiani, MovimentazioniResponseItem item) {
