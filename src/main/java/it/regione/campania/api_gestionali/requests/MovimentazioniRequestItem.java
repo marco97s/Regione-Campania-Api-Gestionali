@@ -5,15 +5,17 @@ import java.util.List;
 public class MovimentazioniRequestItem {
     String dataRilevazione;
     Integer camereOccupate;
+    boolean strutturaChiusa;
     List<MovimentazioneRequestItemMovimentazione> movimentazioni;
 
     public MovimentazioniRequestItem() {
     }
 
-    public MovimentazioniRequestItem(String dataRilevazione, Integer camereOccupate, List<MovimentazioneRequestItemMovimentazione> movimentazioni) {
+    public MovimentazioniRequestItem(String dataRilevazione, Integer camereOccupate, List<MovimentazioneRequestItemMovimentazione> movimentazioni, boolean strutturaChiusa) {
         this.dataRilevazione = dataRilevazione;
         this.camereOccupate = camereOccupate;
         this.movimentazioni = movimentazioni;
+        this.strutturaChiusa = strutturaChiusa;
     }
 
     public String getDataRilevazione() {
@@ -38,5 +40,13 @@ public class MovimentazioniRequestItem {
 
     public void setMovimentazioni(List<MovimentazioneRequestItemMovimentazione> movimentazioni) {
         this.movimentazioni = movimentazioni;
+    }
+
+    public void setStrutturaChiusa(boolean strutturaChiusa) {
+        this.strutturaChiusa = strutturaChiusa;
+    }
+
+    public boolean isStrutturaChiusa() {
+        return strutturaChiusa;
     }
 }

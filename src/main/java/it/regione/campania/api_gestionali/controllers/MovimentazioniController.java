@@ -244,7 +244,21 @@ public class MovimentazioniController {
         item.setDataRilevazione(
                 String.format("%02d%02d%04d", data.getDayOfMonth(), data.getMonthValue(), data.getYear()));
         item.setMovimentazioni(new ArrayList<>());
-        item.setCamereOccupate(0);
+
+        List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(struttura, data.getYear(),
+                data.getMonthValue(), data.getDayOfMonth());
+        if (!modc59.isEmpty()) {
+            item.setCamereOccupate(0);
+            item.setStrutturaChiusa(false);
+        } else {
+            Modc59 lastModC59 = modc59.getLast();
+            item.setCamereOccupate(lastModC59.getCamerelibere());
+            if (lastModC59.getFilename() != null && lastModC59.getFilename().equals("STRUTTUA_CHIUSA")) {
+                item.setStrutturaChiusa(true);
+            } else {
+                item.setStrutturaChiusa(false);
+            }
+        }
 
         List<C59Italiani> italiani = c59ItalianiRepository.findAllByStrutturaAndDate(
                 struttura.getIdstrutturaricettiva(), data.getYear(), data.getMonthValue(), data.getDayOfMonth());
@@ -332,7 +346,7 @@ public class MovimentazioniController {
         }
 
         saveMovimentazioni(struttura, dataRilevazione, giornata.getCamereOccupate(), totArrivi, totPartenze,
-                totPresenti, totPresentiNottePrecedente, italiani, stranieri);
+                totPresenti, totPresentiNottePrecedente, italiani, stranieri, giornata.isStrutturaChiusa());
     }
 
     private int processItaliani(MovimentazioneRequestItemMovimentazione movimentazione, StruttureRicettive struttura,
@@ -381,7 +395,7 @@ public class MovimentazioniController {
 
     private void saveMovimentazioni(StruttureRicettive struttura, LocalDate dataRilevazione, int camereOccupate,
             int totArrivi, int totPartenze, int totPresenti, int totPresentiNottePrecedente, List<C59Italiani> italiani,
-            List<C59Stranieri> stranieri) {
+            List<C59Stranieri> stranieri, boolean strutturaChiusa) {
         Modc59 modc59 = new Modc59();
         modc59.setAnno(dataRilevazione.getYear());
         modc59.setMese(dataRilevazione.getMonthValue());
@@ -392,6 +406,9 @@ public class MovimentazioniController {
         modc59.setTotpartiti(totPartenze);
         modc59.setTotpresenti(totPresenti);
         modc59.setPresentinotte(totPresentiNottePrecedente);
+        if (strutturaChiusa) {
+            modc59.setFilename("STRUTTUA_CHIUSA");
+        }
 
         c59ItalianiRepository.saveAll(italiani);
         c59StranieriRepository.saveAll(stranieri);
