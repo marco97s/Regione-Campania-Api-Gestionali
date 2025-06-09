@@ -247,7 +247,7 @@ public class MovimentazioniController {
 
         List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(struttura, data.getYear(),
                 data.getMonthValue(), data.getDayOfMonth());
-        if (!modc59.isEmpty()) {
+        if (modc59.isEmpty()) {
             item.setCamereOccupate(0);
             item.setStrutturaChiusa(false);
         } else {
