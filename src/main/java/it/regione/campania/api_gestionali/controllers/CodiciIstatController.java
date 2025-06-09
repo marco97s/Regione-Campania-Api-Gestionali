@@ -23,7 +23,7 @@ public class CodiciIstatController {
     @Autowired
     private NazioniRepository nazioniRepository;
 
-    @GetMapping("/tutti")
+    @GetMapping("")
     public CodiciIstatResponse getCodiciIstat() {
         List<Province> province = provinceRepository.findAll();
         List<Nazioni> nazioni = nazioniRepository.findAll();
