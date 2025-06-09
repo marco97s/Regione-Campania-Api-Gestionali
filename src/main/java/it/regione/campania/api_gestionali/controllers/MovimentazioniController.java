@@ -35,6 +35,7 @@ import it.regione.campania.api_gestionali.responses.CodiciIstatResponse;
 import it.regione.campania.api_gestionali.responses.MovimentazioniResponse;
 import it.regione.campania.api_gestionali.responses.MovimentazioniResponseItem;
 import it.regione.campania.api_gestionali.responses.MovimentazioniResponseItemMovimentazione;
+import it.regione.campania.api_gestionali.responses.UlimaRilevazioneResponse;
 import jakarta.transaction.Transactional;
 
 import org.springframework.web.bind.annotation.PostMapping;
@@ -448,4 +449,29 @@ public class MovimentazioniController {
             }
         }
     }    
+
+    @GetMapping("/ultima-rilevazione")
+    public ResponseEntity<Object> getUltimaRilevazione(Authentication authentication) {
+        String cusr = authentication.getName();
+        logger.info("Richiesta ultima rilevazione per cusr: " + cusr);
+
+        Optional<StruttureRicettive> strutturaOpt = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+        if (strutturaOpt.isEmpty()) {
+            return badRequest("Nessuna struttura trovata con cusr: " + cusr);
+        }
+
+        StruttureRicettive struttura = strutturaOpt.get();
+        if (struttura.getDatafineattivita() != null) {
+            return badRequest("Struttura cessata con cusr: " + cusr);
+        }
+
+        Optional<LocalDate> ultimaRilevazione = modc59Repository.findMaxC59ByStruttura(struttura);
+        if (ultimaRilevazione.isEmpty()) {
+            logger.warning("Nessuna rilevazione trovata per la struttura: " + struttura.getIdstrutturaricettiva());
+            return ResponseEntity.ok(new UlimaRilevazioneResponse());
+        } else {
+            return ResponseEntity.ok(
+                    new UlimaRilevazioneResponse(ultimaRilevazione.get().format(java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"))));
+        }
+    }
 }
