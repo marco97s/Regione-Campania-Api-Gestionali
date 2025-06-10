@@ -20,29 +20,26 @@ public class SecurityConfig {
     }
 
     @Bean
-public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-    http
-        .authorizeHttpRequests(authorize -> authorize
-            .requestMatchers(HttpMethod.POST, "/turismoweb/api-gestionali/v1/auth/login").permitAll()
-            .requestMatchers("/v1/auth/**").permitAll()
-            .requestMatchers("/v1/codici-istat/**").permitAll()
-            .requestMatchers("/v3/api-docs/**").permitAll()
-            .requestMatchers("/swagger-ui/**").permitAll()
-            .requestMatchers("/swagger-ui.html").permitAll()
-            .requestMatchers("/turismoweb/api-gestionali/v1/auth/**").permitAll()
-            .requestMatchers("/turismoweb/api-gestionali/v1/codici-istat/**").permitAll()
-            .requestMatchers("/turismoweb/api-gestionali/v3/api-docs/**").permitAll()
-            .requestMatchers("/turismoweb/api-gestionali/swagger-ui/**").permitAll()
-            .requestMatchers("/turismoweb/api-gestionali/swagger-ui.html").permitAll()
-            .anyRequest().authenticated()
-        )
-        .csrf(csrf -> csrf.disable())
-        .sessionManagement(session -> session
-            .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-        )
-        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-   
-    return http.build();
-}
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/turismoweb/api-gestionali/v1/auth/**").permitAll()
+                        .requestMatchers("/v1/auth/**").permitAll()
+                        .requestMatchers("/v1/codici-istat/**").permitAll()
+                        .requestMatchers("/v3/api-docs/**").permitAll()
+                        .requestMatchers("/swagger-ui/**").permitAll()
+                        .requestMatchers("/swagger-ui.html").permitAll()
+                        .requestMatchers("/turismoweb/api-gestionali/v1/codici-istat/**").permitAll()
+                        .requestMatchers("/turismoweb/api-gestionali/v3/api-docs/**").permitAll()
+                        .requestMatchers("/turismoweb/api-gestionali/swagger-ui/**").permitAll()
+                        .requestMatchers("/turismoweb/api-gestionali/swagger-ui.html").permitAll()
+                        .anyRequest().authenticated())
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
 
 }
