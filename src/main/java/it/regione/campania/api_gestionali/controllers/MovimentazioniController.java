@@ -31,7 +31,6 @@ import it.regione.campania.api_gestionali.repositories.StruttureRicettiveReposit
 import it.regione.campania.api_gestionali.requests.MovimentazioneRequestItemMovimentazione;
 import it.regione.campania.api_gestionali.requests.MovimentazioniRequest;
 import it.regione.campania.api_gestionali.requests.MovimentazioniRequestItem;
-import it.regione.campania.api_gestionali.responses.CodiciIstatResponse;
 import it.regione.campania.api_gestionali.responses.MovimentazioniResponse;
 import it.regione.campania.api_gestionali.responses.MovimentazioniResponseItem;
 import it.regione.campania.api_gestionali.responses.MovimentazioniResponseItemMovimentazione;
