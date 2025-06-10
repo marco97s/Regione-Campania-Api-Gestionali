@@ -27,7 +27,12 @@ public class SecurityConfig {
                     "/v1/codici-istat/**",
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
-                    "/swagger-ui.html"
+                    "/swagger-ui.html",
+                    "/turismoweb/api-gestionali/v1/auth/**",
+                    "/turismoweb/api-gestionali/v1/codici-istat/**",
+                    "/turismoweb/api-gestionali/v3/api-docs/**",
+                    "/turismoweb/api-gestionali/swagger-ui/**",
+                    "/turismoweb/api-gestionali/swagger-ui.html"
                 ).permitAll()
                 .anyRequest().authenticated()
             )
