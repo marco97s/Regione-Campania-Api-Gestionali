@@ -11,10 +11,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -23,6 +25,35 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     public JwtAuthenticationFilter(String jwtSecret) {
         this.jwtSecret = jwtSecret;
+    }
+
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
+    
+    private final List<String> publicEndpoints = Arrays.asList(
+        "/v1/auth/**",
+        "/v1/codici-istat/**",
+        "/v3/api-docs/**",
+        "/swagger-ui/**",
+        "/swagger-ui.html",
+        "/turismoweb/api-gestionali/v1/auth/**",
+        "/turismoweb/api-gestionali/v1/codici-istat/**",
+        "/turismoweb/api-gestionali/v3/api-docs/**",
+        "/turismoweb/api-gestionali/swagger-ui/**",
+        "/turismoweb/api-gestionali/swagger-ui.html"
+    );
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        String requestPath = request.getRequestURI();
+        
+        boolean shouldSkip = publicEndpoints.stream()
+            .anyMatch(pattern -> pathMatcher.match(pattern, requestPath));
+            
+        if (shouldSkip) {
+            System.out.println("Filtro JWT saltato per endpoint pubblico: " + requestPath);
+        }
+        
+        return shouldSkip;
     }
 
     @Override
