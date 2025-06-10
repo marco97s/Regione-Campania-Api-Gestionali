@@ -19,7 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 
 @RestController
-@RequestMapping("/v1/struttura-ricettiva")
+@RequestMapping("/v1/anagrafica")
 public class StrutturaRicettivaController {
     private static final Logger logger = Logger.getLogger(StrutturaRicettivaController.class.getName());
 
