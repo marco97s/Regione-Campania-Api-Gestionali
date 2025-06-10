@@ -12,6 +12,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Component
 @Order(0) // Prima di tutto
@@ -22,17 +23,16 @@ public class SecurityDebugFilter implements Filter {
             throws IOException, ServletException {
         
         HttpServletRequest httpRequest = (HttpServletRequest) request;
-        String requestURI = httpRequest.getRequestURI();
+        HttpServletResponse httpResponse = (HttpServletResponse) response;
         
-        System.out.println("=== SECURITY DEBUG ===");
-        System.out.println("URI da verificare: " + requestURI);
-        System.out.println("Dovrebbe matchare: /turismoweb/api-gestionali/v1/auth/**");
-        
-        // Test del pattern matching
-        AntPathMatcher matcher = new AntPathMatcher();
-        boolean shouldMatch = matcher.match("/turismoweb/api-gestionali/v1/auth/**", requestURI);
-        System.out.println("Pattern match result: " + shouldMatch);
+        System.out.println("=== PRIMA DELLA CATENA FILTRI ===");
+        System.out.println("URI: " + httpRequest.getRequestURI());
+        System.out.println("Status prima: " + httpResponse.getStatus());
         
         chain.doFilter(request, response);
+        
+        System.out.println("=== DOPO LA CATENA FILTRI ===");
+        System.out.println("Status dopo: " + httpResponse.getStatus());
+        System.out.println("Response committed: " + httpResponse.isCommitted());
     }
 }
