@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cglib.core.Local;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -131,13 +132,16 @@ public class MovimentazioniController {
         }
 
         Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
-
         for (MovimentazioniRequestItem giornata : request.getGiornate()) {
-            ResponseEntity<Object> validationResponse = validateGiornata(giornata, ultimoMeseValidato);
+            ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato);
             if (validationResponse != null) {
                 return validationResponse;
+            } if (checkIfExists(giornata, struttura)) {
+                return badRequest("Movimentazioni già esistenti per la data: " + giornata.getDataRilevazione());
             }
+        }
 
+        for (MovimentazioniRequestItem giornata : request.getGiornate()) {
             processGiornata(giornata, struttura);
         }
 
@@ -174,7 +178,7 @@ public class MovimentazioniController {
         Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
 
         for (MovimentazioniRequestItem giornata : request.getGiornate()) {
-            ResponseEntity<Object> validationResponse = validateGiornata(giornata, ultimoMeseValidato);
+            ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato);
             if (validationResponse != null) {
                 return validationResponse;
             }
@@ -246,8 +250,8 @@ public class MovimentazioniController {
                 String.format("%02d%02d%04d", data.getDayOfMonth(), data.getMonthValue(), data.getYear()));
         item.setMovimentazioni(new ArrayList<>());
 
-        List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(struttura, data.getYear(),
-                data.getMonthValue(), data.getDayOfMonth());
+        List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(struttura, data.getMonthValue(),
+                data.getYear(), data.getDayOfMonth());
         if (modc59.isEmpty()) {
             item.setCamereOccupate(0);
             item.setStrutturaChiusa(false);
@@ -272,18 +276,35 @@ public class MovimentazioniController {
         return item;
     }
 
-    private ResponseEntity<Object> validateGiornata(MovimentazioniRequestItem giornata,
+    private ResponseEntity<Object> validateGiornata(StruttureRicettive struttura, MovimentazioniRequestItem giornata,
             Optional<String> ultimoMeseValidato) {
+        if (giornata.getDataRilevazione() == null || giornata.getDataRilevazione().isEmpty()) {
+            logger.warning("Data di rilevazione non fornita");
+            return badRequest("Il campo dataRilevazione è obbligatorio");
+        }
         LocalDate dataRilevazione = LocalDate.parse(giornata.getDataRilevazione(),
                 java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
 
+        Integer ultimoMeseValidatoInteger = Integer.parseInt(ultimoMeseValidato.get().split("-")[0]);
+
         if (ultimoMeseValidato.isPresent()
-                && Integer.parseInt(ultimoMeseValidato.get().split("-")[0]) >= dataRilevazione.getMonthValue()) {
+                && ultimoMeseValidatoInteger >= dataRilevazione.getMonthValue()) {
             logger.warning("Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
                     + giornata.getDataRilevazione());
             return badRequest(
                     "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
                             + giornata.getDataRilevazione());
+        }
+
+        LocalDate dataRilevazionePrecedente = dataRilevazione.minusDays(1);
+        if (dataRilevazionePrecedente.getMonthValue() > ultimoMeseValidatoInteger) {
+            List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(
+                    struttura, dataRilevazionePrecedente.getMonthValue(), dataRilevazionePrecedente.getYear(),
+                    dataRilevazionePrecedente.getDayOfMonth());
+            if (modc59.isEmpty()) {
+                logger.warning("Non è possibile saltare date nell'invio della movimentazione");
+                return badRequest("Non è possibile saltare date nell'invio della movimentazione");
+            }
         }
 
         if (dataRilevazione.isAfter(LocalDate.now())) {
@@ -320,6 +341,14 @@ public class MovimentazioniController {
         }
 
         return null;
+    }
+
+    private boolean checkIfExists(MovimentazioniRequestItem giornata, StruttureRicettive struttura) {
+        LocalDate dataRilevazione = LocalDate.parse(giornata.getDataRilevazione(),
+                java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
+        List<Modc59> modc59DaEliminare = modc59Repository.findModC59ForAllDate(struttura,
+                dataRilevazione.getMonthValue(), dataRilevazione.getYear(), dataRilevazione.getDayOfMonth());
+        return !modc59DaEliminare.isEmpty();
     }
 
     private void processGiornata(MovimentazioniRequestItem giornata, StruttureRicettive struttura) {
@@ -447,7 +476,7 @@ public class MovimentazioniController {
                 item.setCamereOccupate(item.getCamereOccupate() + s.getCamere());
             }
         }
-    }    
+    }
 
     @GetMapping("/ultima-rilevazione")
     public ResponseEntity<Object> getUltimaRilevazione(Authentication authentication) {
@@ -470,7 +499,8 @@ public class MovimentazioniController {
             return ResponseEntity.ok(new UlimaRilevazioneResponse());
         } else {
             return ResponseEntity.ok(
-                    new UlimaRilevazioneResponse(ultimaRilevazione.get().format(java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"))));
+                    new UlimaRilevazioneResponse(
+                            ultimaRilevazione.get().format(java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"))));
         }
     }
 }
