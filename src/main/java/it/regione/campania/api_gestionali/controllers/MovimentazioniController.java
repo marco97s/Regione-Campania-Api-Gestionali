@@ -132,13 +132,19 @@ public class MovimentazioniController {
         }
 
         Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
+        int idx = 0;
         for (MovimentazioniRequestItem giornata : request.getGiornate()) {
-            ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato);
+            ResponseEntity<Object> dateValidationResponse = validateDateSequence(giornata, request, idx);
+            if (dateValidationResponse != null) {
+                return dateValidationResponse;
+            }
+            ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato, idx > 0);
             if (validationResponse != null) {
                 return validationResponse;
             } if (checkIfExists(giornata, struttura)) {
                 return badRequest("Movimentazioni già esistenti per la data: " + giornata.getDataRilevazione());
             }
+            idx++;
         }
 
         for (MovimentazioniRequestItem giornata : request.getGiornate()) {
@@ -176,14 +182,19 @@ public class MovimentazioniController {
         }
 
         Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
-
+        int idx = 0;
         for (MovimentazioniRequestItem giornata : request.getGiornate()) {
-            ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato);
+            ResponseEntity<Object> dateValidationResponse = validateDateSequence(giornata, request, idx);
+            if (dateValidationResponse != null) {
+                return dateValidationResponse;
+            }
+            ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato, idx > 0);
             if (validationResponse != null) {
                 return validationResponse;
             }
 
             processGiornata(giornata, struttura);
+            idx++;
         }
 
         return ResponseEntity.status(200).build();
@@ -276,8 +287,19 @@ public class MovimentazioniController {
         return item;
     }
 
+    private ResponseEntity<Object> validateDateSequence(MovimentazioniRequestItem giornata, MovimentazioniRequest request, int idx) {
+        LocalDate dataRilevazione = LocalDate.parse(giornata.getDataRilevazione(),
+                java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
+        if (idx > 0 && dataRilevazione.minusDays(1).isAfter(LocalDate.parse(request.getGiornate().get(idx - 1).getDataRilevazione(),
+                java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy")))) {
+            logger.warning("Non è possibile saltare date nell'invio della movimentazione");
+            return badRequest("Non è possibile saltare date nell'invio della movimentazione");
+        }
+        return null;
+    }
+
     private ResponseEntity<Object> validateGiornata(StruttureRicettive struttura, MovimentazioniRequestItem giornata,
-            Optional<String> ultimoMeseValidato) {
+            Optional<String> ultimoMeseValidato, boolean isMassive) {
         if (giornata.getDataRilevazione() == null || giornata.getDataRilevazione().isEmpty()) {
             logger.warning("Data di rilevazione non fornita");
             return badRequest("Il campo dataRilevazione è obbligatorio");
@@ -297,7 +319,7 @@ public class MovimentazioniController {
         }
 
         LocalDate dataRilevazionePrecedente = dataRilevazione.minusDays(1);
-        if (dataRilevazionePrecedente.getMonthValue() > ultimoMeseValidatoInteger) {
+        if (!isMassive && dataRilevazionePrecedente.getMonthValue() > ultimoMeseValidatoInteger) {
             List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(
                     struttura, dataRilevazionePrecedente.getMonthValue(), dataRilevazionePrecedente.getYear(),
                     dataRilevazionePrecedente.getDayOfMonth());
