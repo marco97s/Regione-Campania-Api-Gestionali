@@ -34,14 +34,14 @@ public class CodiciIstatController {
 
         for (Province p : province) {
             response.getCodiciIstatProvince()
-                    .add(new it.regione.campania.api_gestionali.responses.CodiciIstatResponseItem(p.getDescrizione(),
-                            p.getCodiceistat()));
+                    .add(new it.regione.campania.api_gestionali.responses.CodiciIstatResponseItem(p.getCodiceistat(), p.getDescrizione()
+                            ));
         }
 
         for (Nazioni n : nazioni) {
             response.getCodiciIstatNazioni()
-                    .add(new it.regione.campania.api_gestionali.responses.CodiciIstatResponseItem(n.getDescrizione(),
-                            String.format("%03d", n.getCodiceEpt())));
+                    .add(new it.regione.campania.api_gestionali.responses.CodiciIstatResponseItem(String.format("%03d", n.getCodiceEpt()), n.getDescrizione()
+                            ));
         }
 
         return response;
