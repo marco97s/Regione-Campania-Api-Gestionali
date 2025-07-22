@@ -1,5 +1,7 @@
 package it.regione.campania.api_gestionali.config;
 
+import java.util.List;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -21,6 +23,14 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                .cors(cors -> cors.configurationSource(request -> {
+                    var corsConfiguration = new org.springframework.web.cors.CorsConfiguration();
+                    corsConfiguration.setAllowedOrigins(List.of("*")); // Permetti tutte le origini
+                    corsConfiguration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); // Permetti tutti i metodi HTTP
+                    corsConfiguration.setAllowedHeaders(List.of("*")); // Permetti tutti gli header
+                    corsConfiguration.setExposedHeaders(List.of("Authorization", "Content-Type")); // Header esposti
+                    return corsConfiguration;
+                }))
                 .authorizeHttpRequests(authorize -> authorize
                         // Aggiungi i pattern COMPLETI che corrispondono a quello che vedi nei log
                         .requestMatchers("/turismoweb/api-gestionali/v1/auth/**").permitAll()
