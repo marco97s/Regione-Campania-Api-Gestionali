@@ -267,7 +267,7 @@ public class MovimentazioniController {
         } else {
             Modc59 lastModC59 = modc59.getLast();
             item.setCamereOccupate(lastModC59.getCamerelibere());
-            if (lastModC59.getFilename() != null && lastModC59.getFilename().equals("STRUTTUA_CHIUSA")) {
+            if (lastModC59.getFilename() != null && lastModC59.getFilename().equals("STRUTTURA_CHIUSA")) {
                 item.setStrutturaChiusa(true);
             } else {
                 item.setStrutturaChiusa(false);
@@ -465,7 +465,7 @@ public class MovimentazioniController {
         modc59.setTotpresenti(totPresenti);
         modc59.setPresentinotte(totPresentiNottePrecedente);
         if (strutturaChiusa) {
-            modc59.setFilename("STRUTTUA_CHIUSA");
+            modc59.setFilename("STRUTTURA_CHIUSA");
         }
 
         c59ItalianiRepository.saveAll(italiani);
