@@ -5,7 +5,7 @@ import java.util.List;
 public class MovimentazioniRequestItem {
     String dataRilevazione;
     Integer camereOccupate;
-    boolean strutturaChiusa;
+    boolean strutturaChiusa = false;
     List<MovimentazioneRequestItemMovimentazione> movimentazioni;
 
     public MovimentazioniRequestItem() {
