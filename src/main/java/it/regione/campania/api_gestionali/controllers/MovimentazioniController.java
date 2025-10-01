@@ -7,12 +7,14 @@ import java.util.Optional;
 import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cglib.core.Local;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,10 +39,6 @@ import it.regione.campania.api_gestionali.responses.MovimentazioniResponseItem;
 import it.regione.campania.api_gestionali.responses.MovimentazioniResponseItemMovimentazione;
 import it.regione.campania.api_gestionali.responses.UlimaRilevazioneResponse;
 import jakarta.transaction.Transactional;
-
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
 @RequestMapping("/v1/movimentazione")
@@ -316,6 +314,14 @@ public class MovimentazioniController {
             return badRequest(
                     "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
                             + giornata.getDataRilevazione());
+        }
+
+        if (giornata.isStrutturaChiusa()) {
+            for (MovimentazioneRequestItemMovimentazione r : giornata.getMovimentazioni()) {
+                if (r.getArrivi() > 0 || r.getPartenze() > 0 | r.getPresentiNottePrecedente() > 0) {
+                    return badRequest("Non è possibile inserire movimentazioni se la struttura è chiusa");
+                } 
+            }
         }
 
         LocalDate dataRilevazionePrecedente = dataRilevazione.minusDays(1);
