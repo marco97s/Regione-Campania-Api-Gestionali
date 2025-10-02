@@ -403,6 +403,13 @@ public class MovimentazioniController {
             }
         }
 
+        for (MovimentazioneRequestItemMovimentazione movimentazione : giornata.getMovimentazioni()) {
+            totPartenze += movimentazione.getPartenze();
+            totPresentiNottePrecedente += movimentazione.getPresentiNottePrecedente();
+        }
+
+        totPresenti = totPresentiNottePrecedente + totArrivi - totPartenze;
+
         saveMovimentazioni(struttura, dataRilevazione, giornata.getCamereOccupate(), totArrivi, totPartenze,
                 totPresenti, totPresentiNottePrecedente, italiani, stranieri, giornata.isStrutturaChiusa());
     }
