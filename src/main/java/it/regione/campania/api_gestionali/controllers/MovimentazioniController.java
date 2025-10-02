@@ -424,6 +424,7 @@ public class MovimentazioniController {
         i.setAnno(dataRilevazione.getYear());
         i.setMese(dataRilevazione.getMonthValue());
         i.setGiorno(dataRilevazione.getDayOfMonth());
+        i.setDatainserimento(java.time.LocalDateTime.now());
         italiani.add(i);
 
         return movimentazione.getArrivi();
@@ -446,6 +447,7 @@ public class MovimentazioniController {
         s.setAnno(dataRilevazione.getYear());
         s.setMese(dataRilevazione.getMonthValue());
         s.setGiorno(dataRilevazione.getDayOfMonth());
+        s.setDatainserimento(LocalDate.now());
         stranieri.add(s);
 
         return movimentazione.getArrivi();
@@ -464,6 +466,7 @@ public class MovimentazioniController {
         modc59.setTotpartiti(totPartenze);
         modc59.setTotpresenti(totPresenti);
         modc59.setPresentinotte(totPresentiNottePrecedente);
+        modc59.setDatainserimento(java.time.LocalDateTime.now());
         if (strutturaChiusa) {
             modc59.setFilename("STRUTTURA_CHIUSA");
         }
