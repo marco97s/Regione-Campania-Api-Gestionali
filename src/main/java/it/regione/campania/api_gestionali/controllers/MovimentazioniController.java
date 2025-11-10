@@ -43,6 +43,7 @@ import jakarta.transaction.Transactional;
 @RestController
 @RequestMapping("/v1/movimentazione")
 public class MovimentazioniController {
+
     private static final Logger logger = Logger.getLogger(MovimentazioniController.class.getName());
 
     @Autowired
@@ -66,9 +67,10 @@ public class MovimentazioniController {
     /**
      * Ottiene l'archivio delle movimentazioni per una struttura ricettiva.
      *
-     * @param dataInizio     La data di inizio per l'archivio (formato: ddMMyyyy).
-     * @param offset         Il numero di giorni da includere nell'archivio.
-     * @param authentication L'oggetto di autenticazione contenente il nome utente.
+     * @param dataInizio La data di inizio per l'archivio (formato: ddMMyyyy).
+     * @param offset Il numero di giorni da includere nell'archivio.
+     * @param authentication L'oggetto di autenticazione contenente il nome
+     * utente.
      * @return Una risposta contenente l'archivio delle movimentazioni.
      */
     @GetMapping()
@@ -105,9 +107,10 @@ public class MovimentazioniController {
     /**
      * Inserisce nuove movimentazioni per una struttura ricettiva.
      *
-     * @param request        L'oggetto contenente i dati delle movimentazioni da
-     *                       inserire.
-     * @param authentication L'oggetto di autenticazione contenente il nome utente.
+     * @param request L'oggetto contenente i dati delle movimentazioni da
+     * inserire.
+     * @param authentication L'oggetto di autenticazione contenente il nome
+     * utente.
      * @return Una risposta HTTP con lo stato dell'operazione.
      */
     @PostMapping()
@@ -115,38 +118,42 @@ public class MovimentazioniController {
     public ResponseEntity<Object> inserimentoMovimentazione(
             @RequestBody MovimentazioniRequest request,
             Authentication authentication) {
+        try {
+            String cusr = authentication.getName();
+            logger.info("Richiesta inserimento movimentazioni per cusr: " + cusr);
 
-        String cusr = authentication.getName();
-        logger.info("Richiesta inserimento movimentazioni per cusr: " + cusr);
-
-        Optional<StruttureRicettive> strutturaOpt = struttureRicettiveRepository.getStrutturaFromCir(cusr);
-        if (strutturaOpt.isEmpty()) {
-            return badRequest("Nessuna struttura trovata con cusr: " + cusr);
-        }
-
-        StruttureRicettive struttura = strutturaOpt.get();
-        if (struttura.getDatafineattivita() != null) {
-            return badRequest("Struttura cessata con cusr: " + cusr);
-        }
-
-        Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
-        int idx = 0;
-        for (MovimentazioniRequestItem giornata : request.getGiornate()) {
-            ResponseEntity<Object> dateValidationResponse = validateDateSequence(giornata, request, idx);
-            if (dateValidationResponse != null) {
-                return dateValidationResponse;
+            Optional<StruttureRicettive> strutturaOpt = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+            if (strutturaOpt.isEmpty()) {
+                return badRequest("Nessuna struttura trovata con cusr: " + cusr);
             }
-            ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato, idx > 0);
-            if (validationResponse != null) {
-                return validationResponse;
-            } if (checkIfExists(giornata, struttura)) {
-                return badRequest("Movimentazioni già esistenti per la data: " + giornata.getDataRilevazione());
-            }
-            idx++;
-        }
 
-        for (MovimentazioniRequestItem giornata : request.getGiornate()) {
-            processGiornata(giornata, struttura);
+            StruttureRicettive struttura = strutturaOpt.get();
+            if (struttura.getDatafineattivita() != null) {
+                return badRequest("Struttura cessata con cusr: " + cusr);
+            }
+
+            Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
+            int idx = 0;
+            for (MovimentazioniRequestItem giornata : request.getGiornate()) {
+                ResponseEntity<Object> dateValidationResponse = validateDateSequence(giornata, request, idx);
+                if (dateValidationResponse != null) {
+                    return dateValidationResponse;
+                }
+                ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato, idx > 0);
+                if (validationResponse != null) {
+                    return validationResponse;
+                }
+                if (checkIfExists(giornata, struttura)) {
+                    return badRequest("Movimentazioni già esistenti per la data: " + giornata.getDataRilevazione());
+                }
+                idx++;
+            }
+
+            for (MovimentazioniRequestItem giornata : request.getGiornate()) {
+                processGiornata(giornata, struttura);
+            }
+        } catch (IllegalArgumentException e) {
+            return badRequest(e.getMessage());
         }
 
         return ResponseEntity.status(201).build();
@@ -155,9 +162,10 @@ public class MovimentazioniController {
     /**
      * Modifica le movimentazioni esistenti per una struttura ricettiva.
      *
-     * @param request        L'oggetto contenente i dati delle movimentazioni da
-     *                       modificare.
-     * @param authentication L'oggetto di autenticazione contenente il nome utente.
+     * @param request L'oggetto contenente i dati delle movimentazioni da
+     * modificare.
+     * @param authentication L'oggetto di autenticazione contenente il nome
+     * utente.
      * @return Una risposta HTTP con lo stato dell'operazione.
      */
     @PutMapping()
@@ -165,46 +173,50 @@ public class MovimentazioniController {
     public ResponseEntity<Object> modificaMovimentazione(
             @RequestBody MovimentazioniRequest request,
             Authentication authentication) {
+        try {
+            String cusr = authentication.getName();
+            logger.info("Richiesta inserimento movimentazioni per cusr: " + cusr);
 
-        String cusr = authentication.getName();
-        logger.info("Richiesta inserimento movimentazioni per cusr: " + cusr);
-
-        Optional<StruttureRicettive> strutturaOpt = struttureRicettiveRepository.getStrutturaFromCir(cusr);
-        if (strutturaOpt.isEmpty()) {
-            return badRequest("Nessuna struttura trovata con cusr: " + cusr);
-        }
-
-        StruttureRicettive struttura = strutturaOpt.get();
-        if (struttura.getDatafineattivita() != null) {
-            return badRequest("Struttura cessata con cusr: " + cusr);
-        }
-
-        Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
-        int idx = 0;
-        for (MovimentazioniRequestItem giornata : request.getGiornate()) {
-            ResponseEntity<Object> dateValidationResponse = validateDateSequence(giornata, request, idx);
-            if (dateValidationResponse != null) {
-                return dateValidationResponse;
-            }
-            ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato, idx > 0);
-            if (validationResponse != null) {
-                return validationResponse;
+            Optional<StruttureRicettive> strutturaOpt = struttureRicettiveRepository.getStrutturaFromCir(cusr);
+            if (strutturaOpt.isEmpty()) {
+                return badRequest("Nessuna struttura trovata con cusr: " + cusr);
             }
 
-            processGiornata(giornata, struttura);
-            idx++;
-        }
+            StruttureRicettive struttura = strutturaOpt.get();
+            if (struttura.getDatafineattivita() != null) {
+                return badRequest("Struttura cessata con cusr: " + cusr);
+            }
 
+            Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
+            int idx = 0;
+            for (MovimentazioniRequestItem giornata : request.getGiornate()) {
+                ResponseEntity<Object> dateValidationResponse = validateDateSequence(giornata, request, idx);
+                if (dateValidationResponse != null) {
+                    return dateValidationResponse;
+                }
+                ResponseEntity<Object> validationResponse = validateGiornata(struttura, giornata, ultimoMeseValidato, idx > 0);
+                if (validationResponse != null) {
+                    return validationResponse;
+                }
+
+                processGiornata(giornata, struttura);
+                idx++;
+            }
+
+        } catch (IllegalArgumentException e) {
+            return badRequest(e.getMessage());
+        }
         return ResponseEntity.status(200).build();
     }
 
     /**
      * Elimina le movimentazioni per una struttura ricettiva.
      *
-     * @param dataInizio     La data di inizio per l'eliminazione (formato:
-     *                       ddMMyyyy).
-     * @param offset         Il numero di giorni da eliminare.
-     * @param authentication L'oggetto di autenticazione contenente il nome utente.
+     * @param dataInizio La data di inizio per l'eliminazione (formato:
+     * ddMMyyyy).
+     * @param offset Il numero di giorni da eliminare.
+     * @param authentication L'oggetto di autenticazione contenente il nome
+     * utente.
      * @return Una risposta HTTP con lo stato dell'operazione.
      */
     @DeleteMapping()
@@ -313,14 +325,14 @@ public class MovimentazioniController {
                     + giornata.getDataRilevazione());
             return badRequest(
                     "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
-                            + giornata.getDataRilevazione());
+                    + giornata.getDataRilevazione());
         }
 
         if (giornata.isStrutturaChiusa()) {
             for (MovimentazioneRequestItemMovimentazione r : giornata.getMovimentazioni()) {
                 if (r.getArrivi() > 0 || r.getPartenze() > 0 | r.getPresentiNottePrecedente() > 0) {
                     return badRequest("Non è possibile inserire movimentazioni se la struttura è chiusa");
-                } 
+                }
             }
         }
 
@@ -338,10 +350,10 @@ public class MovimentazioniController {
         if (dataRilevazione.isAfter(LocalDate.now())) {
             logger.warning(
                     "Non è possibile inserire, modificare o eliminare movimentazioni per una data futura: "
-                            + giornata.getDataRilevazione());
+                    + giornata.getDataRilevazione());
             return badRequest(
                     "Non è possibile inserire, modificare o eliminare movimentazioni per una data futura: "
-                            + giornata.getDataRilevazione());
+                    + giornata.getDataRilevazione());
         }
 
         return null;
@@ -356,16 +368,16 @@ public class MovimentazioniController {
                     + dataRilevazione);
             return badRequest(
                     "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
-                            + dataRilevazione);
+                    + dataRilevazione);
         }
 
         if (dataRilevazione.isAfter(LocalDate.now())) {
             logger.warning(
                     "Non è possibile inserire, modificare o eliminare movimentazioni per una data futura: "
-                            + dataRilevazione);
+                    + dataRilevazione);
             return badRequest(
                     "Non è possibile inserire, modificare o eliminare movimentazioni per una data futura: "
-                            + dataRilevazione);
+                    + dataRilevazione);
         }
 
         return null;
