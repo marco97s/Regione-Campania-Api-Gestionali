@@ -336,6 +336,19 @@ public class MovimentazioniController {
             }
         }
 
+        // Verifica che presenti notte precedente + arrivi - partenze non sia negativo
+        for (MovimentazioneRequestItemMovimentazione movimentazione : giornata.getMovimentazioni()) {
+            int risultato = movimentazione.getPresentiNottePrecedente() + movimentazione.getArrivi() - movimentazione.getPartenze();
+            if (risultato < 0) {
+                logger.warning("Il calcolo presenti notte precedente + arrivi - partenze risulta negativo: " + risultato);
+                return badRequest("Il calcolo presenti notte precedente + arrivi - partenze non può essere negativo. " +
+                        "Presenti: " + movimentazione.getPresentiNottePrecedente() + 
+                        ", Arrivi: " + movimentazione.getArrivi() + 
+                        ", Partenze: " + movimentazione.getPartenze() + 
+                        ", Risultato: " + risultato);
+            }
+        }
+
         LocalDate dataRilevazionePrecedente = dataRilevazione.minusDays(1);
         if (!isMassive && dataRilevazionePrecedente.getMonthValue() > ultimoMeseValidatoInteger) {
             List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(
