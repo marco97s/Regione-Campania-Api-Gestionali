@@ -43,6 +43,8 @@ import jakarta.transaction.Transactional;
 @RestController
 @RequestMapping("/v1/movimentazione")
 public class MovimentazioniController {
+    @Autowired
+    private it.regione.campania.api_gestionali.repositories.PeriodiChiusuraRepository periodiChiusuraRepository;
 
     private static final Logger logger = Logger.getLogger(MovimentazioniController.class.getName());
 
@@ -317,15 +319,20 @@ public class MovimentazioniController {
         LocalDate dataRilevazione = LocalDate.parse(giornata.getDataRilevazione(),
                 java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
 
-        Integer ultimoMeseValidatoInteger = Integer.parseInt(ultimoMeseValidato.get().split("-")[0]);
 
-        if (ultimoMeseValidato.isPresent()
-                && ultimoMeseValidatoInteger >= dataRilevazione.getMonthValue()) {
+
+        if (ultimoMeseValidato.isPresent()) {
+            String[] parts = ultimoMeseValidato.get().split("-");
+            int meseValidato = Integer.parseInt(parts[0]);
+            int annoValidato = parts.length > 1 ? Integer.parseInt(parts[1]) : LocalDate.now().getYear();
+            if (dataRilevazione.getYear() < annoValidato ||
+            (dataRilevazione.getYear() == annoValidato && dataRilevazione.getMonthValue() <= meseValidato)) {
             logger.warning("Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
-                    + giornata.getDataRilevazione());
+                + giornata.getDataRilevazione());
             return badRequest(
-                    "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
-                    + giornata.getDataRilevazione());
+                "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
+                + giornata.getDataRilevazione());
+            }
         }
 
         if (giornata.isStrutturaChiusa()) {
@@ -350,13 +357,21 @@ public class MovimentazioniController {
         }
 
         LocalDate dataRilevazionePrecedente = dataRilevazione.minusDays(1);
-        if (!isMassive && dataRilevazionePrecedente.getMonthValue() > ultimoMeseValidatoInteger) {
-            List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(
-                    struttura, dataRilevazionePrecedente.getMonthValue(), dataRilevazionePrecedente.getYear(),
-                    dataRilevazionePrecedente.getDayOfMonth());
-            if (modc59.isEmpty()) {
-                logger.warning("Non è possibile saltare date nell'invio della movimentazione");
-                return badRequest("Non è possibile saltare date nell'invio della movimentazione");
+        if (!isMassive && ultimoMeseValidato.isPresent()) {
+            String[] parts = ultimoMeseValidato.get().split("-");
+            int meseValidato = Integer.parseInt(parts[0]);
+            int annoValidato = parts.length > 1 ? Integer.parseInt(parts[1]) : LocalDate.now().getYear();
+            boolean precedenteDopoValidato =
+                (dataRilevazionePrecedente.getYear() > annoValidato) ||
+                (dataRilevazionePrecedente.getYear() == annoValidato && dataRilevazionePrecedente.getMonthValue() > meseValidato);
+            if (precedenteDopoValidato) {
+                List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(
+                        struttura, dataRilevazionePrecedente.getMonthValue(), dataRilevazionePrecedente.getYear(),
+                        dataRilevazionePrecedente.getDayOfMonth());
+                if (modc59.isEmpty()) {
+                    logger.warning("Non è possibile saltare date nell'invio della movimentazione");
+                    return badRequest("Non è possibile saltare date nell'invio della movimentazione");
+                }
             }
         }
 
