@@ -43,8 +43,6 @@ import jakarta.transaction.Transactional;
 @RestController
 @RequestMapping("/v1/movimentazione")
 public class MovimentazioniController {
-    @Autowired
-    private it.regione.campania.api_gestionali.repositories.PeriodiChiusuraRepository periodiChiusuraRepository;
 
     private static final Logger logger = Logger.getLogger(MovimentazioniController.class.getName());
 
