@@ -358,7 +358,7 @@ public class MovimentazioniController {
         if (ultimoMeseValidato.isPresent()) {
             String[] parts = ultimoMeseValidato.get().split("-");
             int meseValidato = Integer.parseInt(parts[0]);
-            int annoValidato = parts.length > 1 ? Integer.parseInt(parts[1]) : LocalDate.now().getYear();
+            int annoValidato = parts.length > 1 ? Integer.parseInt(parts[1]) : LocalDate.now().getYear() - 1;
             if (dataRilevazione.getYear() < annoValidato ||
             (dataRilevazione.getYear() == annoValidato && dataRilevazione.getMonthValue() <= meseValidato)) {
             logger.warning("Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
@@ -424,13 +424,18 @@ public class MovimentazioniController {
     private ResponseEntity<Object> validateGiornata(LocalDate dataRilevazione,
             Optional<String> ultimoMeseValidato) {
 
-        if (ultimoMeseValidato.isPresent()
-                && Integer.parseInt(ultimoMeseValidato.get().split("-")[0]) >= dataRilevazione.getMonthValue()) {
-            logger.warning("Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
-                    + dataRilevazione);
-            return badRequest(
-                    "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
-                    + dataRilevazione);
+        if (ultimoMeseValidato.isPresent()) {
+            String[] parts = ultimoMeseValidato.get().split("-");
+            int meseValidato = Integer.parseInt(parts[0]);
+            int annoValidato = parts.length > 1 ? Integer.parseInt(parts[1]) : LocalDate.now().getYear() - 1;
+            if (dataRilevazione.getYear() < annoValidato ||
+                    (dataRilevazione.getYear() == annoValidato && dataRilevazione.getMonthValue() <= meseValidato)) {
+                logger.warning("Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
+                        + dataRilevazione);
+                return badRequest(
+                        "Non è possibile inserire, modificare o eliminare movimentazioni per un mese già validato: "
+                        + dataRilevazione);
+            }
         }
 
         if (dataRilevazione.isAfter(LocalDate.now())) {
