@@ -43,6 +43,8 @@ import jakarta.transaction.Transactional;
 @RestController
 @RequestMapping("/v1/movimentazione")
 public class MovimentazioniController {
+    @Autowired
+    private it.regione.campania.api_gestionali.repositories.PeriodiChiusuraRepository periodiChiusuraRepository;
 
     private static final Logger logger = Logger.getLogger(MovimentazioniController.class.getName());
 
@@ -317,7 +319,41 @@ public class MovimentazioniController {
         LocalDate dataRilevazione = LocalDate.parse(giornata.getDataRilevazione(),
                 java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"));
 
+        // --- Controllo periodo di chiusura ---
+        // 1. Se la data è all'interno di un periodo di chiusura, errore parlante
+        Optional<it.regione.campania.api_gestionali.models.PeriodiChiusura> periodoChiusura = periodiChiusuraRepository.findPeriodoChiusuraByDate(
+            struttura.getIdstrutturaricettiva(),
+            dataRilevazione.getYear(),
+            dataRilevazione.getMonthValue(),
+            dataRilevazione.getDayOfMonth()
+        );
+        if (periodoChiusura.isPresent()) {
+            String msg = "Non è possibile inserire movimentazioni per una data all'interno di un periodo di chiusura. " +
+                "La prima data valida è il giorno successivo alla fine del periodo di chiusura: " +
+                periodoChiusura.get().getDataFinePeriodiChiusura().toLocalDate().plusDays(1);
+            logger.warning(msg);
+            return badRequest(msg);
+        }
 
+        // 2. Se la data è il giorno prima di un periodo di chiusura, arrivi + presentiNottePrecedente - partiti == 0
+        LocalDate giornoSuccessivo = dataRilevazione.plusDays(1);
+        Optional<it.regione.campania.api_gestionali.models.PeriodiChiusura> periodoChiusuraDomani = periodiChiusuraRepository.findPeriodoChiusuraByDate(
+            struttura.getIdstrutturaricettiva(),
+            giornoSuccessivo.getYear(),
+            giornoSuccessivo.getMonthValue(),
+            giornoSuccessivo.getDayOfMonth()
+        );
+        if (periodoChiusuraDomani.isPresent()) {
+            int somma = 0;
+            for (MovimentazioneRequestItemMovimentazione m : giornata.getMovimentazioni()) {
+                somma += m.getPresentiNottePrecedente() + m.getArrivi() - m.getPartenze();
+            }
+            if (somma != 0) {
+                String msg = "Il giorno prima di un periodo di chiusura la somma di presenti notte precedente, arrivi e partenze deve essere 0.";
+                logger.warning(msg);
+                return badRequest(msg);
+            }
+        }
 
         if (ultimoMeseValidato.isPresent()) {
             String[] parts = ultimoMeseValidato.get().split("-");
