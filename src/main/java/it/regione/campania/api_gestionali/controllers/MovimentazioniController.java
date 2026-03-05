@@ -399,12 +399,24 @@ public class MovimentazioniController {
                 (dataRilevazionePrecedente.getYear() > annoValidato) ||
                 (dataRilevazionePrecedente.getYear() == annoValidato && dataRilevazionePrecedente.getMonthValue() > meseValidato);
             if (precedenteDopoValidato) {
-                List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(
-                        struttura, dataRilevazionePrecedente.getMonthValue(), dataRilevazionePrecedente.getYear(),
-                        dataRilevazionePrecedente.getDayOfMonth());
-                if (modc59.isEmpty()) {
-                    logger.warning("Non è possibile saltare date nell'invio della movimentazione");
-                    return badRequest("Non è possibile saltare date nell'invio della movimentazione");
+                // Verifica se il giorno precedente è in un periodo di chiusura
+                Optional<it.regione.campania.api_gestionali.models.PeriodiChiusura> periodoChiusuraPrecedente = 
+                    periodiChiusuraRepository.findPeriodoChiusuraByDate(
+                        struttura.getIdstrutturaricettiva(),
+                        dataRilevazionePrecedente.getYear(),
+                        dataRilevazionePrecedente.getMonthValue(),
+                        dataRilevazionePrecedente.getDayOfMonth()
+                    );
+                
+                // Se il giorno precedente NON è in un periodo di chiusura, verifica che esista il modello
+                if (periodoChiusuraPrecedente.isEmpty()) {
+                    List<Modc59> modc59 = modc59Repository.findModC59ForAllDate(
+                            struttura, dataRilevazionePrecedente.getMonthValue(), dataRilevazionePrecedente.getYear(),
+                            dataRilevazionePrecedente.getDayOfMonth());
+                    if (modc59.isEmpty()) {
+                        logger.warning("Non è possibile saltare date nell'invio della movimentazione");
+                        return badRequest("Non è possibile saltare date nell'invio della movimentazione");
+                    }
                 }
             }
         }
