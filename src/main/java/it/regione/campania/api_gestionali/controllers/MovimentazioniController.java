@@ -624,8 +624,46 @@ public class MovimentazioniController {
 
         Optional<LocalDate> ultimaRilevazione = modc59Repository.findMaxC59ByStruttura(struttura);
         if (ultimaRilevazione.isEmpty()) {
-            logger.warning("Nessuna rilevazione trovata per la struttura: " + struttura.getIdstrutturaricettiva());
-            return ResponseEntity.ok(new UlimaRilevazioneResponse());
+            logger.info("Nessuna rilevazione trovata per la struttura: " + struttura.getIdstrutturaricettiva() + 
+                       ". Calcolo della prima data valida.");
+            
+            // Se la struttura non ha mai movimentato, calcolare la data come:
+            // la più recente tra ultimo giorno dell'ultimo mese validato, data inizio attività o data creazione
+            LocalDate primaDataValida = null;
+            
+            // 1. Calcolare l'ultimo giorno dell'ultimo mese validato
+            Optional<String> ultimoMeseValidato = modc59Repository.getUltimoMeseValidato();
+            if (ultimoMeseValidato.isPresent()) {
+                String[] parts = ultimoMeseValidato.get().split("-");
+                int meseValidato = Integer.parseInt(parts[0]);
+                int annoValidato = parts.length > 1 ? Integer.parseInt(parts[1]) : LocalDate.now().getYear() - 1;
+                // Ultimo giorno del mese validato
+                primaDataValida = LocalDate.of(annoValidato, meseValidato, 1).plusMonths(1).minusDays(1);
+            }
+            
+            // 2. Considerare la data inizio attività (se presente e successiva)
+            if (struttura.getDatainizioattivita() != null) {
+                if (primaDataValida == null || struttura.getDatainizioattivita().isAfter(primaDataValida)) {
+                    primaDataValida = struttura.getDatainizioattivita();
+                }
+            }
+            // 3. Altrimenti considerare la data creazione (se data inizio attività non presente)
+            else if (struttura.getDatacreazione() != null) {
+                LocalDate dataCreazione = new java.sql.Date(struttura.getDatacreazione().getTime()).toLocalDate();
+                if (primaDataValida == null || dataCreazione.isAfter(primaDataValida)) {
+                    primaDataValida = dataCreazione;
+                }
+            }
+            
+            if (primaDataValida != null) {
+                return ResponseEntity.ok(
+                        new UlimaRilevazioneResponse(
+                                primaDataValida.format(java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"))));
+            } else {
+                logger.warning("Impossibile determinare la prima data valida per la struttura: " + 
+                              struttura.getIdstrutturaricettiva());
+                return ResponseEntity.ok(new UlimaRilevazioneResponse());
+            }
         } else {
             return ResponseEntity.ok(
                     new UlimaRilevazioneResponse(
